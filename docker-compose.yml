@@ -16,13 +16,14 @@ services:
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_SCHEMA: ${DB_SCHEMA}
+      DOUBLE_GIS_API_KEY: ${DOUBLE_GIS_API_KEY}
     depends_on:
       psql_bp:
         condition: service_healthy
     networks:
       - blueprint
   psql_bp:
-    image: postgres:latest
+    image: postgis/postgis:17-3.5
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_DATABASE}

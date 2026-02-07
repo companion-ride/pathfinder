@@ -16,12 +16,16 @@ import (
 // Service represents a service that interacts with a database.
 type Service interface {
 	// Health returns a map of health status information.
-	// The keys and values in the map are service-specific.
 	Health() map[string]string
 
 	// Close terminates the database connection.
-	// It returns an error if the connection cannot be closed.
 	Close() error
+
+	// SaveRoute stores a WKT LINESTRING geometry and returns the route ID.
+	SaveRoute(ctx context.Context, wktLinestring string) (int, error)
+
+	// GetRouteGeometry retrieves the WKT LINESTRING for a given route ID.
+	GetRouteGeometry(ctx context.Context, routeID int) (string, error)
 }
 
 type service struct {
@@ -112,4 +116,28 @@ func (s *service) Health() map[string]string {
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", database)
 	return s.db.Close()
+}
+
+func (s *service) SaveRoute(ctx context.Context, wktLinestring string) (int, error) {
+	var id int
+	err := s.db.QueryRowContext(ctx,
+		"INSERT INTO routes (geometry) VALUES (ST_GeomFromText($1, 4326)) RETURNING id",
+		wktLinestring,
+	).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("inserting route: %w", err)
+	}
+	return id, nil
+}
+
+func (s *service) GetRouteGeometry(ctx context.Context, routeID int) (string, error) {
+	var wkt string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT ST_AsText(geometry) FROM routes WHERE id = $1",
+		routeID,
+	).Scan(&wkt)
+	if err != nil {
+		return "", fmt.Errorf("getting route geometry: %w", err)
+	}
+	return wkt, nil
 }

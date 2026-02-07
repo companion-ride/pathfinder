@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pathfinder</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #map { width: 100%; height: 100%; }
+
+        #panel {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 260px;
+        }
+        #panel h2 { font-size: 16px; margin-bottom: 8px; }
+        #status { font-size: 14px; color: #555; margin-bottom: 12px; }
+        #error { font-size: 13px; color: #d32f2f; margin-bottom: 8px; display: none; }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #1a73e8;
+            color: white;
+        }
+        button:hover { background: #1557b0; }
+        .legend { margin-top: 12px; font-size: 12px; color: #777; }
+        .legend div { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .line-sample { width: 20px; height: 4px; display: inline-block; border-radius: 2px; }
+        .dot.green { background: #34a853; }
+        .dot.red { background: #ea4335; }
+        .dot.blue { background: #4285f4; }
+        .dot.orange { background: #fa7b17; }
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="panel">
+        <h2>Pathfinder</h2>
+        <div id="status">Click on the map to set Point A</div>
+        <div id="error"></div>
+        <button id="resetBtn" onclick="resetAll()">Reset</button>
+        <div class="legend">
+            <div><span class="dot green"></span> Point A (start)</div>
+            <div><span class="dot red"></span> Point B (end)</div>
+            <div><span class="dot blue"></span> Point C (query)</div>
+            <div><span class="dot orange"></span> Closest point</div>
+            <hr style="border:none;margin:6px 0">
+            <div><span class="line-sample" style="background:#4CAF50"></span> Traffic: fast</div>
+            <div><span class="line-sample" style="background:#FFC107"></span> Traffic: normal</div>
+            <div><span class="line-sample" style="background:#F44336"></span> Traffic: slow</div>
+            <div><span class="line-sample" style="background:#1a73e8"></span> Traffic: unknown</div>
+            <div><span class="line-sample" style="background:#9C27B0;border:1px dashed #9C27B0"></span> Walking route</div>
+        </div>
+    </div>
+
+    <script src="https://mapgl.2gis.com/api/js/v1"></script>
+    <script>
+        // State
+        let step = 1; // 1=select A, 2=select B, 3=select C
+        let map, markerA, markerB, markerC, markerClosest;
+        let routePolylines = [];
+        let walkingPolyline = null;
+        let routeId = null;
+
+        const TRAFFIC_COLORS = {
+            fast: '#4CAF50',
+            normal: '#FFC107',
+            slow: '#F44336',
+        };
+        const DEFAULT_ROUTE_COLOR = '#1a73e8';
+
+        // Colored marker SVGs as data URIs
+        function markerIcon(color) {
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">
+                <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="${color}"/>
+                <circle cx="12" cy="12" r="5" fill="white"/>
+            </svg>`;
+            return 'data:image/svg+xml;base64,' + btoa(svg);
+        }
+
+        const ICONS = {
+            green: markerIcon('#34a853'),
+            red: markerIcon('#ea4335'),
+            blue: markerIcon('#4285f4'),
+            orange: markerIcon('#fa7b17'),
+        };
+
+        function setStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function showError(text) {
+            const el = document.getElementById('error');
+            el.textContent = text;
+            el.style.display = text ? 'block' : 'none';
+        }
+
+        function clearMapObjects() {
+            [markerA, markerB, markerC, markerClosest].forEach(m => m && m.destroy());
+            routePolylines.forEach(p => p.destroy());
+            if (walkingPolyline) walkingPolyline.destroy();
+            markerA = markerB = markerC = markerClosest = null;
+            routePolylines = [];
+            walkingPolyline = null;
+            routeId = null;
+        }
+
+        function resetAll() {
+            clearMapObjects();
+            showError('');
+            step = 1;
+            setStatus('Click on the map to set Point A');
+        }
+
+        async function buildRoute(a, b) {
+            const resp = await fetch('/routes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    point_a: { lat: a[1], lon: a[0] },
+                    point_b: { lat: b[1], lon: b[0] },
+                }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            return resp.json();
+        }
+
+        async function walkToClosest(routeId, coords) {
+            const resp = await fetch(`/routes/${routeId}/walk-to-closest`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: coords[1], lon: coords[0] }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            return resp.json();
+        }
+
+        function drawRouteSegments(segments) {
+            for (const seg of segments) {
+                const polyCoords = seg.coords.map(c => [c.lon, c.lat]);
+                if (polyCoords.length < 2) continue;
+                const color = TRAFFIC_COLORS[seg.color] || DEFAULT_ROUTE_COLOR;
+                const polyline = new mapgl.Polyline(map, {
+                    coordinates: polyCoords,
+                    width: 5,
+                    color: color,
+                });
+                routePolylines.push(polyline);
+            }
+        }
+
+        async function initMap() {
+            const configResp = await fetch('/api/config');
+            const config = await configResp.json();
+
+            map = new mapgl.Map('map', {
+                center: [82.92, 54.98],
+                zoom: 13,
+                key: config.map_api_key,
+            });
+
+            map.on('click', async (e) => {
+                const coords = e.lngLat;
+
+                if (step === 1) {
+                    showError('');
+                    markerA = new mapgl.Marker(map, {
+                        coordinates: coords,
+                        icon: ICONS.green,
+                    });
+                    step = 2;
+                    setStatus('Click on the map to set Point B');
+
+                } else if (step === 2) {
+                    markerB = new mapgl.Marker(map, {
+                        coordinates: coords,
+                        icon: ICONS.red,
+                    });
+                    setStatus('Building route...');
+                    document.getElementById('panel').classList.add('loading');
+
+                    try {
+                        const coordsA = markerA.getCoordinates();
+                        const data = await buildRoute(coordsA, coords);
+                        routeId = data.route_id;
+
+                        drawRouteSegments(data.segments);
+
+                        step = 3;
+                        setStatus('Click on the map to set Point C');
+                    } catch (err) {
+                        showError('Route failed: ' + err.message);
+                        step = 2;
+                        markerB.destroy();
+                        markerB = null;
+                        setStatus('Click on the map to set Point B (retry)');
+                    } finally {
+                        document.getElementById('panel').classList.remove('loading');
+                    }
+
+                } else if (step === 3) {
+                    markerC = new mapgl.Marker(map, {
+                        coordinates: coords,
+                        icon: ICONS.blue,
+                    });
+                    setStatus('Finding walking route to closest point...');
+                    document.getElementById('panel').classList.add('loading');
+
+                    try {
+                        const data = await walkToClosest(routeId, coords);
+                        const closestCoords = [data.closest_lon, data.closest_lat];
+
+                        markerClosest = new mapgl.Marker(map, {
+                            coordinates: closestCoords,
+                            icon: ICONS.orange,
+                        });
+
+                        const walkCoords = data.geometry.map(c => [c.lon, c.lat]);
+                        if (walkCoords.length >= 2) {
+                            walkingPolyline = new mapgl.Polyline(map, {
+                                coordinates: walkCoords,
+                                width: 3,
+                                color: '#9C27B0',
+                                dashLength: 8,
+                                gapLength: 8,
+                                gapColor: 'transparent',
+                            });
+                        }
+
+                        step = 4;
+                        setStatus('Done! Click Reset to start over.');
+                    } catch (err) {
+                        showError('Walking route failed: ' + err.message);
+                        markerC.destroy();
+                        markerC = null;
+                        step = 3;
+                        setStatus('Click on the map to set Point C (retry)');
+                    } finally {
+                        document.getElementById('panel').classList.remove('loading');
+                    }
+                }
+            });
+        }
+
+        initMap();
+    </script>
+</body>
+</html>

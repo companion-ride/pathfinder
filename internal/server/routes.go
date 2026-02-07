@@ -18,8 +18,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 	}))
 
 	r.GET("/", s.HelloWorldHandler)
-
 	r.GET("/health", s.healthHandler)
+
+	r.StaticFile("/app", "./web/index.html")
+	r.GET("/api/config", s.ConfigHandler)
+
+	r.POST("/routes", s.CreateRouteHandler)
+	r.POST("/routes/:id/closest-point", s.FindClosestPointHandler)
+	r.POST("/routes/:id/walk-to-closest", s.WalkToClosestHandler)
 
 	return r
 }

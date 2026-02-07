@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"pathfinder/internal/database"
 	"pathfinder/internal/server"
 )
 
@@ -38,6 +39,9 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 }
 
 func main() {
+	if err := database.RunMigrations("migrations"); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
 
 	server := server.NewServer()
 
