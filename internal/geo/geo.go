@@ -13,8 +13,12 @@ type Coord struct {
 }
 
 type Segment struct {
-	Coords []Coord `json:"coords"`
-	Color  string  `json:"color"`
+	Coords      []Coord  `json:"coords"`
+	Color       string   `json:"color"`
+	Comment     string   `json:"comment,omitempty"`
+	StreetNames []string `json:"street_names,omitempty"`
+	Distance    int      `json:"distance"`
+	Duration    int      `json:"duration"`
 }
 
 // ParseWKTLinestring parses a WKT LINESTRING into a slice of Coords.

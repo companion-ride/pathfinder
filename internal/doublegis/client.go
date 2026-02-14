@@ -16,8 +16,19 @@ const baseURL = "http://routing.api.2gis.com/routing/7.0.0/global"
 var linestringRe = regexp.MustCompile(`LINESTRING\s*\(([^)]+)\)`)
 
 type RouteSegment struct {
-	WKT   string
-	Color string
+	WKT         string
+	Color       string
+	Comment     string
+	StreetNames []string
+	Distance    int
+	Duration    int
+}
+
+type RouteInfo struct {
+	TotalDistance    int
+	TotalDuration   int
+	UITotalDistance  string
+	UITotalDuration string
 }
 
 type Client struct {
@@ -34,7 +45,7 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLon float64) ([]RouteSegment, string, error) {
+func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLon float64) ([]RouteSegment, string, *RouteInfo, error) {
 	reqBody := RoutingRequest{
 		Points: []Point{
 			{Type: "stop", Lat: startLat, Lon: startLon},
@@ -43,26 +54,36 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 		Transport:   "driving",
 		RouteMode:   "fastest",
 		TrafficMode: "jam",
+		Output:      "detailed",
+		Locale:      "kk",
 	}
 
 	routingResp, err := c.doRoutingRequest(ctx, reqBody)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	if len(routingResp.Result) == 0 {
-		return nil, "", fmt.Errorf("no routes found")
+		return nil, "", nil, fmt.Errorf("no routes found")
 	}
 
-	segments, mergedWKT := extractSegments(routingResp.Result[0])
+	route := routingResp.Result[0]
+	segments, mergedWKT := extractSegments(route)
 	if mergedWKT == "" {
-		return nil, "", fmt.Errorf("no geometry in route response")
+		return nil, "", nil, fmt.Errorf("no geometry in route response")
 	}
 
-	return segments, mergedWKT, nil
+	info := &RouteInfo{
+		TotalDistance:    route.TotalDistance,
+		TotalDuration:   route.TotalDuration,
+		UITotalDistance:  route.UITotalDistance.String(),
+		UITotalDuration: route.UITotalDuration,
+	}
+
+	return segments, mergedWKT, info, nil
 }
 
-func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, toLon float64) (string, error) {
+func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, toLon float64) (string, *RouteInfo, error) {
 	reqBody := RoutingRequest{
 		Points: []Point{
 			{Type: "stop", Lat: fromLat, Lon: fromLon},
@@ -70,23 +91,33 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		},
 		Transport: "pedestrian",
 		RouteMode: "fastest",
+		Output:    "detailed",
+		Locale:    "kk",
 	}
 
 	routingResp, err := c.doRoutingRequest(ctx, reqBody)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	if len(routingResp.Result) == 0 {
-		return "", fmt.Errorf("no walking routes found")
+		return "", nil, fmt.Errorf("no walking routes found")
 	}
 
-	wkt := mergeGeometry(routingResp.Result[0])
+	route := routingResp.Result[0]
+	wkt := mergeGeometry(route)
 	if wkt == "" {
-		return "", fmt.Errorf("no geometry in walking route response")
+		return "", nil, fmt.Errorf("no geometry in walking route response")
 	}
 
-	return wkt, nil
+	info := &RouteInfo{
+		TotalDistance:    route.TotalDistance,
+		TotalDuration:   route.TotalDuration,
+		UITotalDistance:  route.UITotalDistance.String(),
+		UITotalDuration: route.UITotalDuration,
+	}
+
+	return wkt, info, nil
 }
 
 func (c *Client) doRoutingRequest(ctx context.Context, reqBody RoutingRequest) (*RoutingResponse, error) {
@@ -134,7 +165,6 @@ func extractSegments(route Route) ([]RouteSegment, string) {
 				continue
 			}
 
-			// Build per-segment WKT
 			segCoords := strings.Split(matches[1], ",")
 			trimmed := make([]string, len(segCoords))
 			for i, c := range segCoords {
@@ -142,11 +172,14 @@ func extractSegments(route Route) ([]RouteSegment, string) {
 			}
 			segWKT := fmt.Sprintf("LINESTRING(%s)", strings.Join(trimmed, ", "))
 			segments = append(segments, RouteSegment{
-				WKT:   segWKT,
-				Color: seg.Color,
+				WKT:         segWKT,
+				Color:       seg.Color,
+				Comment:     m.Comment,
+				StreetNames: m.OutcomingPath.Names,
+				Distance:    m.OutcomingPath.Distance,
+				Duration:    m.OutcomingPath.Duration,
 			})
 
-			// Merge into full route coords
 			for i, c := range trimmed {
 				if i == 0 && len(allCoords) > 0 && allCoords[len(allCoords)-1] == c {
 					continue

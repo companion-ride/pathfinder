@@ -22,8 +22,10 @@ type PointInput struct {
 }
 
 type CreateRouteResponse struct {
-	RouteID  int           `json:"route_id"`
-	Segments []geo.Segment `json:"segments"`
+	RouteID        int           `json:"route_id"`
+	Segments       []geo.Segment `json:"segments"`
+	TotalDistance   string        `json:"total_distance"`
+	TotalDuration  string        `json:"total_duration"`
 }
 
 type FindClosestPointRequest struct {
@@ -37,9 +39,11 @@ type FindClosestPointResponse struct {
 }
 
 type WalkToClosestResponse struct {
-	ClosestLat float64     `json:"closest_lat"`
-	ClosestLon float64     `json:"closest_lon"`
-	Geometry   []geo.Coord `json:"geometry"`
+	ClosestLat   float64     `json:"closest_lat"`
+	ClosestLon   float64     `json:"closest_lon"`
+	Geometry     []geo.Coord `json:"geometry"`
+	WalkDistance string      `json:"walk_distance"`
+	WalkDuration string      `json:"walk_duration"`
 }
 
 func (s *Server) ConfigHandler(c *gin.Context) {
@@ -53,7 +57,7 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 		return
 	}
 
-	routeSegments, mergedWKT, err := s.doublegis.GetRoute(c.Request.Context(),
+	routeSegments, mergedWKT, routeInfo, err := s.doublegis.GetRoute(c.Request.Context(),
 		req.PointA.Lat, req.PointA.Lon,
 		req.PointB.Lat, req.PointB.Lon,
 	)
@@ -75,12 +79,21 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 			continue
 		}
 		segments = append(segments, geo.Segment{
-			Coords: coords,
-			Color:  rs.Color,
+			Coords:      coords,
+			Color:       rs.Color,
+			Comment:     rs.Comment,
+			StreetNames: rs.StreetNames,
+			Distance:    rs.Distance,
+			Duration:    rs.Duration,
 		})
 	}
 
-	c.JSON(http.StatusCreated, CreateRouteResponse{RouteID: routeID, Segments: segments})
+	c.JSON(http.StatusCreated, CreateRouteResponse{
+		RouteID:       routeID,
+		Segments:      segments,
+		TotalDistance:  routeInfo.UITotalDistance,
+		TotalDuration: routeInfo.UITotalDuration,
+	})
 }
 
 func (s *Server) FindClosestPointHandler(c *gin.Context) {
@@ -144,7 +157,7 @@ func (s *Server) WalkToClosestHandler(c *gin.Context) {
 		return
 	}
 
-	walkWKT, err := s.doublegis.GetWalkingRoute(c.Request.Context(),
+	walkWKT, walkInfo, err := s.doublegis.GetWalkingRoute(c.Request.Context(),
 		req.Lat, req.Lon, closest.Lat, closest.Lon,
 	)
 	if err != nil {
@@ -159,8 +172,10 @@ func (s *Server) WalkToClosestHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, WalkToClosestResponse{
-		ClosestLat: closest.Lat,
-		ClosestLon: closest.Lon,
-		Geometry:   walkCoords,
+		ClosestLat:   closest.Lat,
+		ClosestLon:   closest.Lon,
+		Geometry:     walkCoords,
+		WalkDistance:  walkInfo.UITotalDistance,
+		WalkDuration: walkInfo.UITotalDuration,
 	})
 }
