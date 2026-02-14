@@ -29,6 +29,7 @@ type RouteInfo struct {
 	TotalDuration   int
 	UITotalDistance  string
 	UITotalDuration string
+	Waypoints       []Waypoint
 }
 
 type Client struct {
@@ -78,6 +79,7 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 		TotalDuration:   route.TotalDuration,
 		UITotalDistance:  route.UITotalDistance.String(),
 		UITotalDuration: route.UITotalDuration,
+		Waypoints:       route.Waypoints,
 	}
 
 	return segments, mergedWKT, info, nil
@@ -115,6 +117,7 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		TotalDuration:   route.TotalDuration,
 		UITotalDistance:  route.UITotalDistance.String(),
 		UITotalDuration: route.UITotalDuration,
+		Waypoints:       route.Waypoints,
 	}
 
 	return wkt, info, nil

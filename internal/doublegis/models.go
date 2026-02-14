@@ -20,11 +20,22 @@ type RoutingResponse struct {
 }
 
 type Route struct {
-	Maneuvers       []Maneuver `json:"maneuvers"`
+	Maneuvers       []Maneuver      `json:"maneuvers"`
+	Waypoints       []Waypoint      `json:"waypoints"`
 	TotalDistance    int             `json:"total_distance"`
 	TotalDuration   int             `json:"total_duration"`
 	UITotalDistance  UIDistanceValue `json:"ui_total_distance"`
 	UITotalDuration string          `json:"ui_total_duration"`
+}
+
+type Waypoint struct {
+	OriginalPoint  WaypointPoint `json:"original_point"`
+	ProjectedPoint WaypointPoint `json:"projected_point"`
+}
+
+type WaypointPoint struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
 }
 
 type Maneuver struct {

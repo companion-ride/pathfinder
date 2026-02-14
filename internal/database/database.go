@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,16 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+type RouteMetadata struct {
+	TotalDistance  int
+	TotalDuration int
+	StartLon      float64
+	StartLat      float64
+	EndLon        float64
+	EndLat        float64
+	Maneuvers     json.RawMessage
+}
+
 // Service represents a service that interacts with a database.
 type Service interface {
 	// Health returns a map of health status information.
@@ -21,8 +32,8 @@ type Service interface {
 	// Close terminates the database connection.
 	Close() error
 
-	// SaveRoute stores a WKT LINESTRING geometry and returns the route ID.
-	SaveRoute(ctx context.Context, wktLinestring string) (int, error)
+	// SaveRoute stores a WKT LINESTRING geometry with metadata and returns the route ID.
+	SaveRoute(ctx context.Context, wktLinestring string, meta RouteMetadata) (int, error)
 
 	// GetRouteGeometry retrieves the WKT LINESTRING for a given route ID.
 	GetRouteGeometry(ctx context.Context, routeID int) (string, error)
@@ -118,11 +129,19 @@ func (s *service) Close() error {
 	return s.db.Close()
 }
 
-func (s *service) SaveRoute(ctx context.Context, wktLinestring string) (int, error) {
+func (s *service) SaveRoute(ctx context.Context, wktLinestring string, meta RouteMetadata) (int, error) {
 	var id int
 	err := s.db.QueryRowContext(ctx,
-		"INSERT INTO routes (geometry) VALUES (ST_GeomFromText($1, 4326)) RETURNING id",
-		wktLinestring,
+		`INSERT INTO routes (geometry, total_distance, total_duration, start_point, end_point, maneuvers)
+		 VALUES (ST_GeomFromText($1, 4326), $2, $3,
+		         ST_SetSRID(ST_MakePoint($4, $5), 4326),
+		         ST_SetSRID(ST_MakePoint($6, $7), 4326),
+		         $8)
+		 RETURNING id`,
+		wktLinestring, meta.TotalDistance, meta.TotalDuration,
+		meta.StartLon, meta.StartLat,
+		meta.EndLon, meta.EndLat,
+		meta.Maneuvers,
 	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("inserting route: %w", err)

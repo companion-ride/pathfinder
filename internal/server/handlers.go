@@ -2,12 +2,14 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"pathfinder/internal/database"
 	"pathfinder/internal/geo"
 )
 
@@ -66,7 +68,38 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 		return
 	}
 
-	routeID, err := s.db.SaveRoute(c.Request.Context(), mergedWKT)
+	// Build deduplicated maneuvers list (multi-geometry maneuvers share the same comment)
+	type maneuverEntry struct {
+		Names    []string `json:"names"`
+		Distance int      `json:"distance"`
+	}
+	var maneuvers []maneuverEntry
+	seen := make(map[string]bool)
+	for _, rs := range routeSegments {
+		key := rs.Comment
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		maneuvers = append(maneuvers, maneuverEntry{
+			Names:    rs.StreetNames,
+			Distance: rs.Distance,
+		})
+	}
+
+	maneuversJSON, _ := json.Marshal(maneuvers)
+
+	meta := database.RouteMetadata{
+		TotalDistance:  routeInfo.TotalDistance,
+		TotalDuration: routeInfo.TotalDuration,
+		StartLon:      routeInfo.Waypoints[0].ProjectedPoint.Lon,
+		StartLat:      routeInfo.Waypoints[0].ProjectedPoint.Lat,
+		EndLon:        routeInfo.Waypoints[1].ProjectedPoint.Lon,
+		EndLat:        routeInfo.Waypoints[1].ProjectedPoint.Lat,
+		Maneuvers:     maneuversJSON,
+	}
+
+	routeID, err := s.db.SaveRoute(c.Request.Context(), mergedWKT, meta)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save route"})
 		return
