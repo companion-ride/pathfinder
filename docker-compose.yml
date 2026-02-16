@@ -17,8 +17,11 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_SCHEMA: ${DB_SCHEMA}
       DOUBLE_GIS_API_KEY: ${DOUBLE_GIS_API_KEY}
+      REDIS_ADDR: ${REDIS_ADDR}
     depends_on:
       psql_bp:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - blueprint
@@ -39,6 +42,19 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - blueprint
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
     networks:
       - blueprint
 

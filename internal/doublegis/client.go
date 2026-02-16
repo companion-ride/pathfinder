@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -46,7 +47,7 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLon float64) ([]RouteSegment, string, *RouteInfo, error) {
+func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLon float64) ([]RouteSegment, string, *RouteInfo, []byte, error) {
 	reqBody := RoutingRequest{
 		Points: []Point{
 			{Type: "stop", Lat: startLat, Lon: startLon},
@@ -59,19 +60,19 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 		Locale:      "kk",
 	}
 
-	routingResp, err := c.doRoutingRequest(ctx, reqBody)
+	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, "", nil, nil, err
 	}
 
 	if len(routingResp.Result) == 0 {
-		return nil, "", nil, fmt.Errorf("no routes found")
+		return nil, "", nil, nil, fmt.Errorf("no routes found")
 	}
 
 	route := routingResp.Result[0]
 	segments, mergedWKT := extractSegments(route)
 	if mergedWKT == "" {
-		return nil, "", nil, fmt.Errorf("no geometry in route response")
+		return nil, "", nil, nil, fmt.Errorf("no geometry in route response")
 	}
 
 	info := &RouteInfo{
@@ -82,10 +83,10 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 		Waypoints:       route.Waypoints,
 	}
 
-	return segments, mergedWKT, info, nil
+	return segments, mergedWKT, info, rawJSON, nil
 }
 
-func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, toLon float64) (string, *RouteInfo, error) {
+func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, toLon float64) (string, *RouteInfo, []byte, error) {
 	reqBody := RoutingRequest{
 		Points: []Point{
 			{Type: "stop", Lat: fromLat, Lon: fromLon},
@@ -97,19 +98,19 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		Locale:    "kk",
 	}
 
-	routingResp, err := c.doRoutingRequest(ctx, reqBody)
+	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	if len(routingResp.Result) == 0 {
-		return "", nil, fmt.Errorf("no walking routes found")
+		return "", nil, nil, fmt.Errorf("no walking routes found")
 	}
 
 	route := routingResp.Result[0]
 	wkt := mergeGeometry(route)
 	if wkt == "" {
-		return "", nil, fmt.Errorf("no geometry in walking route response")
+		return "", nil, nil, fmt.Errorf("no geometry in walking route response")
 	}
 
 	info := &RouteInfo{
@@ -120,38 +121,43 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		Waypoints:       route.Waypoints,
 	}
 
-	return wkt, info, nil
+	return wkt, info, rawJSON, nil
 }
 
-func (c *Client) doRoutingRequest(ctx context.Context, reqBody RoutingRequest) (*RoutingResponse, error) {
+func (c *Client) doRoutingRequest(ctx context.Context, reqBody RoutingRequest) (*RoutingResponse, []byte, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshaling request: %w", err)
+		return nil, nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s?key=%s", baseURL, c.apiKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return nil, nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("calling 2gis api: %w", err)
+		return nil, nil, fmt.Errorf("calling 2gis api: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("2gis api returned status %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("2gis api returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading response body: %w", err)
 	}
 
 	var routingResp RoutingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&routingResp); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
+	if err := json.Unmarshal(body, &routingResp); err != nil {
+		return nil, nil, fmt.Errorf("decoding response: %w", err)
 	}
 
-	return &routingResp, nil
+	return &routingResp, body, nil
 }
 
 func extractSegments(route Route) ([]RouteSegment, string) {

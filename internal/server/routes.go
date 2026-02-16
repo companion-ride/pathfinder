@@ -24,8 +24,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/api/config", s.ConfigHandler)
 
 	r.POST("/routes", s.CreateRouteHandler)
+	r.GET("/routes/:id", s.GetRouteHandler)
+	r.GET("/routes/:id/raw", s.GetRawRouteHandler)
 	r.POST("/routes/:id/closest-point", s.FindClosestPointHandler)
+	r.GET("/routes/:id/closest-points", s.GetClosestPointsHandler)
 	r.POST("/routes/:id/walk-to-closest", s.WalkToClosestHandler)
+	r.GET("/routes/:id/walks", s.GetWalksHandler)
 
 	return r
 }

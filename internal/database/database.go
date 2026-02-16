@@ -24,6 +24,14 @@ type RouteMetadata struct {
 	Maneuvers     json.RawMessage
 }
 
+type RouteRow struct {
+	ID            string
+	Geometry      string // WKT
+	TotalDistance  int
+	TotalDuration int
+	Maneuvers     json.RawMessage
+}
+
 // Service represents a service that interacts with a database.
 type Service interface {
 	// Health returns a map of health status information.
@@ -33,10 +41,13 @@ type Service interface {
 	Close() error
 
 	// SaveRoute stores a WKT LINESTRING geometry with metadata and returns the route ID.
-	SaveRoute(ctx context.Context, wktLinestring string, meta RouteMetadata) (int, error)
+	SaveRoute(ctx context.Context, wktLinestring string, meta RouteMetadata) (string, error)
 
 	// GetRouteGeometry retrieves the WKT LINESTRING for a given route ID.
-	GetRouteGeometry(ctx context.Context, routeID int) (string, error)
+	GetRouteGeometry(ctx context.Context, routeID string) (string, error)
+
+	// GetRouteByID retrieves the full route row for a given route ID.
+	GetRouteByID(ctx context.Context, routeID string) (*RouteRow, error)
 }
 
 type service struct {
@@ -129,8 +140,8 @@ func (s *service) Close() error {
 	return s.db.Close()
 }
 
-func (s *service) SaveRoute(ctx context.Context, wktLinestring string, meta RouteMetadata) (int, error) {
-	var id int
+func (s *service) SaveRoute(ctx context.Context, wktLinestring string, meta RouteMetadata) (string, error) {
+	var id string
 	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO routes (geometry, total_distance, total_duration, start_point, end_point, maneuvers)
 		 VALUES (ST_GeomFromText($1, 4326), $2, $3,
@@ -144,12 +155,12 @@ func (s *service) SaveRoute(ctx context.Context, wktLinestring string, meta Rout
 		meta.Maneuvers,
 	).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("inserting route: %w", err)
+		return "", fmt.Errorf("inserting route: %w", err)
 	}
 	return id, nil
 }
 
-func (s *service) GetRouteGeometry(ctx context.Context, routeID int) (string, error) {
+func (s *service) GetRouteGeometry(ctx context.Context, routeID string) (string, error) {
 	var wkt string
 	err := s.db.QueryRowContext(ctx,
 		"SELECT ST_AsText(geometry) FROM routes WHERE id = $1",
@@ -159,4 +170,17 @@ func (s *service) GetRouteGeometry(ctx context.Context, routeID int) (string, er
 		return "", fmt.Errorf("getting route geometry: %w", err)
 	}
 	return wkt, nil
+}
+
+func (s *service) GetRouteByID(ctx context.Context, routeID string) (*RouteRow, error) {
+	var row RouteRow
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, ST_AsText(geometry), total_distance, total_duration, maneuvers
+		 FROM routes WHERE id = $1`,
+		routeID,
+	).Scan(&row.ID, &row.Geometry, &row.TotalDistance, &row.TotalDuration, &row.Maneuvers)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
