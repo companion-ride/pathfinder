@@ -22,6 +22,9 @@ jobs:
           DB_SCHEMA: ${{ secrets.DB_SCHEMA }}
           DOUBLE_GIS_API_KEY: ${{ secrets.DOUBLE_GIS_API_KEY }}
           REDIS_ADDR: ${{ secrets.REDIS_ADDR }}
+          GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
+          GATEWAY_SECRET: ${{ secrets.GATEWAY_SECRET }}
+          SERVICE_HOST: ${{ secrets.SERVICE_HOST }}
         run: |
           docker network create blueprint 2>/dev/null || true
           docker compose -f docker-compose.prod.yml build

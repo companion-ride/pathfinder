@@ -31,6 +31,9 @@ services:
       DB_SCHEMA: ${DB_SCHEMA}
       DOUBLE_GIS_API_KEY: ${DOUBLE_GIS_API_KEY}
       REDIS_ADDR: ${REDIS_ADDR}
+      GATEWAY_URL: ${GATEWAY_URL}
+      GATEWAY_SECRET: ${GATEWAY_SECRET}
+      SERVICE_HOST: ${SERVICE_HOST}
     depends_on:
       redis:
         condition: service_healthy
