@@ -23,5 +23,6 @@ jobs:
           DOUBLE_GIS_API_KEY: ${{ secrets.DOUBLE_GIS_API_KEY }}
           REDIS_ADDR: ${{ secrets.REDIS_ADDR }}
         run: |
+          docker network create blueprint 2>/dev/null || true
           docker compose -f docker-compose.prod.yml build
           docker compose -f docker-compose.prod.yml up -d
