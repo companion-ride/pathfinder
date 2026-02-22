@@ -1,3 +1,11 @@
+// Pathfinder API
+//
+//	@title			Pathfinder API
+//	@version		1.0
+//	@description	GIS routing service — builds driving routes via 2GIS and computes walking paths from a passenger to the nearest point on a route.
+//	@host			localhost:8080
+//	@BasePath		/
+
 package main
 
 import (

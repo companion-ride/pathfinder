@@ -52,7 +52,7 @@ type WalkToClosestResponse struct {
 	Geometry        []geo.Coord      `json:"geometry"`
 	WalkDistance    string           `json:"walk_distance"`
 	WalkDuration    string           `json:"walk_duration"`
-	RawWalkResponse json.RawMessage  `json:"raw_walk_response"`
+	RawWalkResponse json.RawMessage  `json:"raw_walk_response" swaggertype:"object"`
 }
 
 func parseRouteID(c *gin.Context) (string, bool) {
@@ -64,10 +64,30 @@ func parseRouteID(c *gin.Context) (string, bool) {
 	return id, true
 }
 
+// ConfigHandler godoc
+//
+//	@Summary	Frontend configuration
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{object}	map[string]string
+//	@Router		/api/config [get]
 func (s *Server) ConfigHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"map_api_key": s.mapAPIKey})
 }
 
+// CreateRouteHandler godoc
+//
+//	@Summary		Create a driving route
+//	@Description	Calls 2GIS routing API, persists the route in PostGIS and caches it in Redis (3 h TTL).
+//	@Tags			routes
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		CreateRouteRequest	true	"Origin and destination"
+//	@Success		201		{object}	CreateRouteResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Failure		502		{object}	map[string]string
+//	@Router			/routes [post]
 func (s *Server) CreateRouteHandler(c *gin.Context) {
 	var req CreateRouteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -151,6 +171,20 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
+// FindClosestPointHandler godoc
+//
+//	@Summary		Find closest point on route
+//	@Description	Projects a passenger coordinate onto the route polyline using s2 geometry. Result is appended to the route's Redis list.
+//	@Tags			navigation
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		string					true	"Route UUID"	format(uuid)
+//	@Param			body	body		FindClosestPointRequest	true	"Passenger coordinates"
+//	@Success		200		{object}	FindClosestPointResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		404		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/routes/{id}/closest-point [post]
 func (s *Server) FindClosestPointHandler(c *gin.Context) {
 	routeID, ok := parseRouteID(c)
 	if !ok {
@@ -191,6 +225,21 @@ func (s *Server) FindClosestPointHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// WalkToClosestHandler godoc
+//
+//	@Summary		Walking path to nearest point on route
+//	@Description	Projects passenger onto route, calls 2GIS pedestrian API, caches result in Redis (3 h TTL).
+//	@Tags			navigation
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path		string					true	"Route UUID"	format(uuid)
+//	@Param			body	body		FindClosestPointRequest	true	"Passenger coordinates"
+//	@Success		200		{object}	WalkToClosestResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		404		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Failure		502		{object}	map[string]string
+//	@Router			/routes/{id}/walk-to-closest [post]
 func (s *Server) WalkToClosestHandler(c *gin.Context) {
 	routeID, ok := parseRouteID(c)
 	if !ok {
@@ -249,6 +298,18 @@ func (s *Server) WalkToClosestHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetRouteHandler godoc
+//
+//	@Summary		Get a route
+//	@Description	Returns route from Redis cache; falls back to PostGIS on cache miss.
+//	@Tags			routes
+//	@Produce		json
+//	@Param			id	path		string	true	"Route UUID"	format(uuid)
+//	@Success		200	{object}	CreateRouteResponse
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/routes/{id} [get]
 // GET /routes/:id — return cached route, fall back to DB on cache miss.
 func (s *Server) GetRouteHandler(c *gin.Context) {
 	routeID, ok := parseRouteID(c)
@@ -284,6 +345,18 @@ func (s *Server) GetRouteHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetClosestPointsHandler godoc
+//
+//	@Summary		Get cached closest-point results
+//	@Description	Returns all closest-point entries from Redis list. 404 when empty or expired.
+//	@Tags			navigation
+//	@Produce		json
+//	@Param			id	path		string					true	"Route UUID"	format(uuid)
+//	@Success		200	{array}		FindClosestPointResponse
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/routes/{id}/closest-points [get]
 // GET /routes/:id/closest-points — return cached list, 404 on miss.
 func (s *Server) GetClosestPointsHandler(c *gin.Context) {
 	routeID, ok := parseRouteID(c)
@@ -308,6 +381,18 @@ func (s *Server) GetClosestPointsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// GetWalksHandler godoc
+//
+//	@Summary		Get cached walk results
+//	@Description	Returns all walk-to-closest entries from Redis list. 404 when empty or expired.
+//	@Tags			navigation
+//	@Produce		json
+//	@Param			id	path		string					true	"Route UUID"	format(uuid)
+//	@Success		200	{array}		WalkToClosestResponse
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/routes/{id}/walks [get]
 // GET /routes/:id/walks — return cached list, 404 on miss.
 func (s *Server) GetWalksHandler(c *gin.Context) {
 	routeID, ok := parseRouteID(c)
@@ -332,6 +417,18 @@ func (s *Server) GetWalksHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// GetRawRouteHandler godoc
+//
+//	@Summary		Raw 2GIS API response
+//	@Description	Returns the verbatim 2GIS routing response from Redis (available for 3 h TTL).
+//	@Tags			routes
+//	@Produce		json
+//	@Param			id	path		string	true	"Route UUID"	format(uuid)
+//	@Success		200	{object}	map[string]interface{}
+//	@Failure		400	{object}	map[string]string
+//	@Failure		404	{object}	map[string]string
+//	@Failure		500	{object}	map[string]string
+//	@Router			/routes/{id}/raw [get]
 // GET /routes/:id/raw — return the raw 2GIS API response from cache.
 func (s *Server) GetRawRouteHandler(c *gin.Context) {
 	routeID, ok := parseRouteID(c)

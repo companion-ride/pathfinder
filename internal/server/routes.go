@@ -21,6 +21,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/health", s.healthHandler)
 
 	r.StaticFile("/app", "./web/index.html")
+	r.StaticFile("/docs", "./web/swagger.html")
+	r.StaticFile("/docs/swagger.json", "./docs/swagger.json")
 	r.GET("/api/config", s.ConfigHandler)
 
 	r.POST("/routes", s.CreateRouteHandler)
@@ -34,6 +36,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 	return r
 }
 
+// HelloWorldHandler godoc
+//
+//	@Summary	Hello World
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{object}	map[string]string
+//	@Router		/ [get]
 func (s *Server) HelloWorldHandler(c *gin.Context) {
 	resp := make(map[string]string)
 	resp["message"] = "Hello World"
@@ -41,6 +50,13 @@ func (s *Server) HelloWorldHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// healthHandler godoc
+//
+//	@Summary	Database health check
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{object}	map[string]string
+//	@Router		/health [get]
 func (s *Server) healthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, s.db.Health())
 }

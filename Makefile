@@ -61,4 +61,8 @@ watch:
             fi; \
         fi
 
-.PHONY: all build run test clean watch docker-run docker-down itest
+swagger:
+	@echo "Generating swagger docs..."
+	@swag init --dir cmd/api,internal/server,internal/geo --output docs --outputTypes json
+
+.PHONY: all build run test clean watch docker-run docker-down itest swagger
