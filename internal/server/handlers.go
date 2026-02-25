@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -461,4 +462,26 @@ func formatDuration(seconds int) string {
 		return fmt.Sprintf("%d h %d min", seconds/3600, (seconds%3600)/60)
 	}
 	return fmt.Sprintf("%d min", seconds/60)
+}
+
+// SwaggerJSONHandler serves swagger.json with host/basePath overridden by env vars.
+// Set SWAGGER_HOST and SWAGGER_BASE_PATH in production (e.g. companion.kopir.uk and /api/pathfinder).
+func (s *Server) SwaggerJSONHandler(c *gin.Context) {
+	data, err := os.ReadFile("./docs/swagger.json")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "swagger.json not found"})
+		return
+	}
+	var spec map[string]any
+	if err := json.Unmarshal(data, &spec); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse swagger.json"})
+		return
+	}
+	if h := os.Getenv("SWAGGER_HOST"); h != "" {
+		spec["host"] = h
+	}
+	if bp := os.Getenv("SWAGGER_BASE_PATH"); bp != "" {
+		spec["basePath"] = bp
+	}
+	c.JSON(http.StatusOK, spec)
 }

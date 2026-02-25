@@ -34,6 +34,8 @@ services:
       GATEWAY_URL: ${GATEWAY_URL}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
       SERVICE_HOST: ${SERVICE_HOST}
+      SWAGGER_HOST: ${SWAGGER_HOST}
+      SWAGGER_BASE_PATH: ${SWAGGER_BASE_PATH}
     depends_on:
       redis:
         condition: service_healthy

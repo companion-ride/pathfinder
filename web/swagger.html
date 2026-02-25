@@ -9,8 +9,11 @@
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
+    // Derive the swagger.json URL relative to the current page so it works
+    // both locally (localhost:8080/docs) and behind the gateway (/api/pathfinder/docs).
+    const base = window.location.pathname.replace(/\/docs$/, '');
     SwaggerUIBundle({
-      url: "/docs/swagger.json",
+      url: base + "/docs/swagger.json",
       dom_id: "#swagger-ui",
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
       layout: "BaseLayout",
