@@ -23,7 +23,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.StaticFile("/app", "./web/index.html")
 	r.StaticFile("/docs", "./web/swagger.html")
 	r.GET("/docs/swagger.json", s.SwaggerJSONHandler)
-	r.GET("/api/config", s.ConfigHandler)
+	r.GET("/config", s.ConfigHandler)
 
 	r.POST("/routes", s.CreateRouteHandler)
 	r.GET("/routes/:id", s.GetRouteHandler)

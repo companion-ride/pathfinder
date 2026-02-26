@@ -184,7 +184,7 @@
         }
 
         async function buildRoute(a, b) {
-            const resp = await fetch('/routes', {
+            const resp = await fetch('/api/pathfinder/routes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -200,7 +200,7 @@
         }
 
         async function walkToClosest(routeId, coords) {
-            const resp = await fetch(`/routes/${routeId}/walk-to-closest`, {
+            const resp = await fetch(`/api/pathfinder/routes/${routeId}/walk-to-closest`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ lat: coords[1], lon: coords[0] }),
@@ -227,7 +227,7 @@
         }
 
         async function initMap() {
-            const configResp = await fetch('/api/config');
+            const configResp = await fetch('/api/pathfinder/config');
             const config = await configResp.json();
 
             map = new mapgl.Map('map', {
