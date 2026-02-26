@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS routes (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_routes_geometry    ON routes USING GIST (geometry);
-CREATE INDEX idx_routes_start_point ON routes USING GIST (start_point);
-CREATE INDEX idx_routes_end_point   ON routes USING GIST (end_point);
+CREATE INDEX IF NOT EXISTS idx_routes_geometry    ON routes USING GIST (geometry);
+CREATE INDEX IF NOT EXISTS idx_routes_start_point ON routes USING GIST (start_point);
+CREATE INDEX IF NOT EXISTS idx_routes_end_point   ON routes USING GIST (end_point);
