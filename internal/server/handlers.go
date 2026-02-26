@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 
@@ -136,8 +137,11 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 		Maneuvers:     maneuversJSON,
 	}
 
+	log.Printf("SaveRoute input: wkt=%q startLon=%v startLat=%v endLon=%v endLat=%v maneuversLen=%d",
+		mergedWKT, meta.StartLon, meta.StartLat, meta.EndLon, meta.EndLat, len(meta.Maneuvers))
 	routeID, err := s.db.SaveRoute(c.Request.Context(), mergedWKT, meta)
 	if err != nil {
+		log.Printf("SaveRoute error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save route"})
 		return
 	}
