@@ -89,6 +89,8 @@
 
     <script src="https://mapgl.2gis.com/api/js/v1"></script>
     <script>
+        const BASE = window.location.pathname.replace(/\/app$/, '');
+
         // State
         let step = 1; // 1=select A, 2=select B, 3=select C
         let map, markerA, markerB, markerC, markerClosest;
@@ -184,7 +186,7 @@
         }
 
         async function buildRoute(a, b) {
-            const resp = await fetch('/api/pathfinder/routes', {
+            const resp = await fetch(BASE + '/routes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -200,7 +202,7 @@
         }
 
         async function walkToClosest(routeId, coords) {
-            const resp = await fetch(`/api/pathfinder/routes/${routeId}/walk-to-closest`, {
+            const resp = await fetch(BASE + `/routes/${routeId}/walk-to-closest`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ lat: coords[1], lon: coords[0] }),
@@ -227,7 +229,7 @@
         }
 
         async function initMap() {
-            const configResp = await fetch('/api/pathfinder/config');
+            const configResp = await fetch(BASE + '/config');
             const config = await configResp.json();
 
             map = new mapgl.Map('map', {
