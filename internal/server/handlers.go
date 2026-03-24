@@ -482,6 +482,9 @@ func formatDuration(seconds int) string {
 	if seconds >= 3600 {
 		return fmt.Sprintf("%d h %d min", seconds/3600, (seconds%3600)/60)
 	}
+	if seconds < 60 {
+		return "1 min"
+	}
 	return fmt.Sprintf("%d min", seconds/60)
 }
 

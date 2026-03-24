@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -27,13 +26,12 @@ import (
 
 const _serviceName = "pathfinder"
 
-func registerWithGateway() {
+func registerWithGateway(port int) {
 	gatewayURL := os.Getenv("GATEWAY_URL")
 	secret := os.Getenv("GATEWAY_SECRET")
 	if gatewayURL == "" || secret == "" {
 		return
 	}
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
 	body, _ := json.Marshal(map[string]any{
 		"name":         _serviceName,
 		"address":      os.Getenv("SERVICE_HOST"),
@@ -120,14 +118,14 @@ func main() {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
 
-	server := server.NewServer()
+	srv, port := server.NewServer()
 
-	registerWithGateway()
+	registerWithGateway(port)
 
 	done := make(chan bool, 1)
-	go gracefulShutdown(server, done)
+	go gracefulShutdown(srv, done)
 
-	err := server.ListenAndServe()
+	err := srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		panic(fmt.Sprintf("http server error: %s", err))
 	}

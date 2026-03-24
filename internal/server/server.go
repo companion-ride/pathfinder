@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -23,11 +24,17 @@ type Server struct {
 	jwtSecretKey string
 }
 
-func NewServer() *http.Server {
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
+func NewServer() (*http.Server, int) {
+	port, err := strconv.Atoi(os.Getenv("PORT"))
+	if err != nil || port == 0 {
+		port = 8080
+		if os.Getenv("PORT") != "" {
+			log.Printf("WARNING: invalid PORT %q, defaulting to %d", os.Getenv("PORT"), port)
+		}
+	}
 	apiKey := os.Getenv("DOUBLE_GIS_API_KEY")
 	redisAddr := os.Getenv("REDIS_ADDR")
-	NewServer := &Server{
+	s := &Server{
 		port:      port,
 		db:        database.New(),
 		doublegis: doublegis.NewClient(apiKey),
@@ -36,14 +43,13 @@ func NewServer() *http.Server {
 		jwtSecretKey: os.Getenv("JWT_SECRET_KEY"),
 	}
 
-	// Declare Server config
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", NewServer.port),
-		Handler:      NewServer.RegisterRoutes(),
+		Addr:         fmt.Sprintf(":%d", s.port),
+		Handler:      s.RegisterRoutes(),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
 
-	return server
+	return server, port
 }
