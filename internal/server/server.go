@@ -32,7 +32,21 @@ func NewServer() (*http.Server, int) {
 			log.Printf("WARNING: invalid PORT %q, defaulting to %d", os.Getenv("PORT"), port)
 		}
 	}
+	// Validate critical environment variables
+	jwtSecret := os.Getenv("JWT_SECRET_KEY")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET_KEY environment variable is required")
+	}
+	for _, key := range []string{"DB_HOST", "DB_PORT", "DB_DATABASE", "DB_USERNAME"} {
+		if os.Getenv(key) == "" {
+			log.Fatalf("%s environment variable is required", key)
+		}
+	}
 	apiKey := os.Getenv("DOUBLE_GIS_API_KEY")
+	if apiKey == "" {
+		log.Fatal("DOUBLE_GIS_API_KEY environment variable is required")
+	}
+
 	redisAddr := os.Getenv("REDIS_ADDR")
 	s := &Server{
 		port:      port,
@@ -40,7 +54,7 @@ func NewServer() (*http.Server, int) {
 		doublegis: doublegis.NewClient(apiKey),
 		cache:     cache.New(redisAddr),
 		mapAPIKey:    apiKey,
-		jwtSecretKey: os.Getenv("JWT_SECRET_KEY"),
+		jwtSecretKey: jwtSecret,
 	}
 
 	server := &http.Server{
