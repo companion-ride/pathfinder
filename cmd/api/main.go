@@ -26,6 +26,8 @@ import (
 
 const _serviceName = "pathfinder"
 
+var gatewayClient = &http.Client{Timeout: 5 * time.Second}
+
 func registerWithGateway(port int) {
 	gatewayURL := os.Getenv("GATEWAY_URL")
 	secret := os.Getenv("GATEWAY_SECRET")
@@ -38,10 +40,14 @@ func registerWithGateway(port int) {
 		"port":         port,
 		"health_check": "/health",
 	})
-	req, _ := http.NewRequest(http.MethodPost, gatewayURL+"/internal/register", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, gatewayURL+"/internal/register", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("could not create gateway register request: %v", err)
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+secret)
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	resp, err := gatewayClient.Do(req)
 	if err != nil {
 		log.Printf("could not register with api-gateway: %v", err)
 		return
@@ -56,40 +62,19 @@ func deregisterFromGateway() {
 	if gatewayURL == "" || secret == "" {
 		return
 	}
-	req, _ := http.NewRequest(http.MethodDelete, gatewayURL+"/internal/deregister?name="+_serviceName, nil)
+	req, err := http.NewRequest(http.MethodDelete, gatewayURL+"/internal/deregister?name="+_serviceName, nil)
+	if err != nil {
+		log.Printf("could not create gateway deregister request: %v", err)
+		return
+	}
 	req.Header.Set("Authorization", "Bearer "+secret)
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	resp, err := gatewayClient.Do(req)
 	if err != nil {
 		log.Printf("could not deregister from api-gateway: %v", err)
 		return
 	}
 	resp.Body.Close()
 	log.Printf("deregistered from api-gateway: %s", _serviceName)
-}
-
-// ResolveService returns "http://host:port" for a service registered in the gateway.
-// Returns empty string if GATEWAY_URL is not configured or service is not found.
-func ResolveService(name string) string {
-	gatewayURL := os.Getenv("GATEWAY_URL")
-	secret := os.Getenv("GATEWAY_SECRET")
-	if gatewayURL == "" || secret == "" {
-		return ""
-	}
-	req, _ := http.NewRequest(http.MethodGet, gatewayURL+"/internal/resolve?name="+name, nil)
-	req.Header.Set("Authorization", "Bearer "+secret)
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	defer resp.Body.Close()
-	var result struct {
-		Address string `json:"address"`
-		Port    int    `json:"port"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return ""
-	}
-	return fmt.Sprintf("http://%s:%d", result.Address, result.Port)
 }
 
 func gracefulShutdown(apiServer *http.Server, done chan bool) {
