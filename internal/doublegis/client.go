@@ -114,7 +114,7 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		Transport: "pedestrian",
 		RouteMode: "fastest",
 		Output:    "detailed",
-		Locale:    "kk",
+		Locale:    c.locale,
 	}
 
 	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)
