@@ -18,8 +18,9 @@ type Server struct {
 	port      int
 	db        database.Service
 	doublegis *doublegis.Client
-	cache     *cache.Cache
-	mapAPIKey string
+	cache        *cache.Cache
+	mapAPIKey    string
+	jwtSecretKey string
 }
 
 func NewServer() *http.Server {
@@ -31,7 +32,8 @@ func NewServer() *http.Server {
 		db:        database.New(),
 		doublegis: doublegis.NewClient(apiKey),
 		cache:     cache.New(redisAddr),
-		mapAPIKey: apiKey,
+		mapAPIKey:    apiKey,
+		jwtSecretKey: os.Getenv("JWT_SECRET_KEY"),
 	}
 
 	// Declare Server config
