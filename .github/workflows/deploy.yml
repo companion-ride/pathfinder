@@ -20,6 +20,7 @@ jobs:
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_SCHEMA: ${{ secrets.DB_SCHEMA }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
           DOUBLE_GIS_API_KEY: ${{ secrets.DOUBLE_GIS_API_KEY }}
           REDIS_ADDR: ${{ secrets.REDIS_ADDR }}
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
