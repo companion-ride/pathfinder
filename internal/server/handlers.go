@@ -23,8 +23,8 @@ type CreateRouteRequest struct {
 }
 
 type PointInput struct {
-	Lat float64 `json:"lat" binding:"required"`
-	Lon float64 `json:"lon" binding:"required"`
+	Lat float64 `json:"lat" binding:"required,min=-90,max=90"`
+	Lon float64 `json:"lon" binding:"required,min=-180,max=180"`
 }
 
 type CreateRouteResponse struct {
@@ -35,8 +35,8 @@ type CreateRouteResponse struct {
 }
 
 type FindClosestPointRequest struct {
-	Lat float64 `json:"lat" binding:"required"`
-	Lon float64 `json:"lon" binding:"required"`
+	Lat float64 `json:"lat" binding:"required,min=-90,max=90"`
+	Lon float64 `json:"lon" binding:"required,min=-180,max=180"`
 }
 
 type FindClosestPointResponse struct {
@@ -125,7 +125,11 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 		})
 	}
 
-	maneuversJSON, _ := json.Marshal(maneuvers)
+	maneuversJSON, err := json.Marshal(maneuvers)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to serialize maneuvers"})
+		return
+	}
 
 	meta := database.RouteMetadata{
 		TotalDistance:  routeInfo.TotalDistance,
@@ -150,6 +154,7 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 	for _, rs := range routeSegments {
 		coords, err := geo.ParseWKTLinestring(rs.WKT)
 		if err != nil {
+			log.Printf("skipping segment with unparseable geometry: %v", err)
 			continue
 		}
 		segments = append(segments, geo.Segment{
@@ -170,8 +175,12 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 	}
 
 	// Best-effort cache — don't fail the request if Redis is down
-	_ = s.cache.SetRoute(c.Request.Context(), routeID, resp)
-	_ = s.cache.SetRawResponse(c.Request.Context(), routeID, rawJSON)
+	if err := s.cache.SetRoute(c.Request.Context(), routeID, resp); err != nil {
+		log.Printf("cache SetRoute error (non-fatal): %v", err)
+	}
+	if err := s.cache.SetRawResponse(c.Request.Context(), routeID, rawJSON); err != nil {
+		log.Printf("cache SetRawResponse error (non-fatal): %v", err)
+	}
 
 	c.JSON(http.StatusCreated, resp)
 }
@@ -225,7 +234,9 @@ func (s *Server) FindClosestPointHandler(c *gin.Context) {
 		ClosestLon:   closest.Lon,
 	}
 
-	_ = s.cache.AddClosestPoint(c.Request.Context(), routeID, resp)
+	if err := s.cache.AddClosestPoint(c.Request.Context(), routeID, resp); err != nil {
+		log.Printf("cache AddClosestPoint error (non-fatal): %v", err)
+	}
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -298,7 +309,9 @@ func (s *Server) WalkToClosestHandler(c *gin.Context) {
 		RawWalkResponse: json.RawMessage(rawJSON),
 	}
 
-	_ = s.cache.AddWalk(c.Request.Context(), routeID, resp)
+	if err := s.cache.AddWalk(c.Request.Context(), routeID, resp); err != nil {
+		log.Printf("cache AddWalk error (non-fatal): %v", err)
+	}
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -340,7 +353,11 @@ func (s *Server) GetRouteHandler(c *gin.Context) {
 		return
 	}
 
-	coords, _ := geo.ParseWKTLinestring(row.Geometry)
+	coords, err := geo.ParseWKTLinestring(row.Geometry)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse route geometry"})
+		return
+	}
 	resp := CreateRouteResponse{
 		RouteID:       row.ID,
 		Segments:      []geo.Segment{{Coords: coords}},
@@ -464,6 +481,9 @@ func formatDistance(meters int) string {
 func formatDuration(seconds int) string {
 	if seconds >= 3600 {
 		return fmt.Sprintf("%d h %d min", seconds/3600, (seconds%3600)/60)
+	}
+	if seconds < 60 {
+		return "1 min"
 	}
 	return fmt.Sprintf("%d min", seconds/60)
 }

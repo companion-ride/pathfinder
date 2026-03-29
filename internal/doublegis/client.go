@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 )
 
-const baseURL = "http://routing.api.2gis.com/routing/7.0.0/global"
+const defaultBaseURL = "http://routing.api.2gis.com/routing/7.0.0/global"
 
 var linestringRe = regexp.MustCompile(`LINESTRING\s*\(([^)]+)\)`)
 
@@ -35,12 +37,24 @@ type RouteInfo struct {
 
 type Client struct {
 	apiKey     string
+	baseURL    string
+	locale     string
 	httpClient *http.Client
 }
 
 func NewClient(apiKey string) *Client {
+	base := os.Getenv("DOUBLEGIS_BASE_URL")
+	if base == "" {
+		base = defaultBaseURL
+	}
+	locale := os.Getenv("DOUBLEGIS_LOCALE")
+	if locale == "" {
+		locale = "kk"
+	}
 	return &Client{
-		apiKey: apiKey,
+		apiKey:  apiKey,
+		baseURL: base,
+		locale:  locale,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -57,7 +71,7 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 		RouteMode:   "fastest",
 		TrafficMode: "jam",
 		Output:      "detailed",
-		Locale:      "kk",
+		Locale:      c.locale,
 	}
 
 	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)
@@ -70,6 +84,11 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 	}
 
 	route := routingResp.Result[0]
+
+	if len(route.Waypoints) < 2 {
+		return nil, "", nil, nil, fmt.Errorf("route has %d waypoints, need at least 2", len(route.Waypoints))
+	}
+
 	segments, mergedWKT := extractSegments(route)
 	if mergedWKT == "" {
 		return nil, "", nil, nil, fmt.Errorf("no geometry in route response")
@@ -95,7 +114,7 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		Transport: "pedestrian",
 		RouteMode: "fastest",
 		Output:    "detailed",
-		Locale:    "kk",
+		Locale:    c.locale,
 	}
 
 	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)
@@ -108,6 +127,11 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 	}
 
 	route := routingResp.Result[0]
+
+	if len(route.Waypoints) < 2 {
+		return "", nil, nil, fmt.Errorf("walking route has %d waypoints, need at least 2", len(route.Waypoints))
+	}
+
 	wkt := mergeGeometry(route)
 	if wkt == "" {
 		return "", nil, nil, fmt.Errorf("no geometry in walking route response")
@@ -130,7 +154,7 @@ func (c *Client) doRoutingRequest(ctx context.Context, reqBody RoutingRequest) (
 		return nil, nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s?key=%s", baseURL, c.apiKey)
+	url := fmt.Sprintf("%s?key=%s", c.baseURL, c.apiKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating request: %w", err)
@@ -171,6 +195,7 @@ func extractSegments(route Route) ([]RouteSegment, string) {
 		for _, seg := range m.OutcomingPath.Geometry {
 			matches := linestringRe.FindStringSubmatch(seg.Selection)
 			if len(matches) < 2 {
+				log.Printf("skipping segment: geometry regex did not match: %q", seg.Selection)
 				continue
 			}
 
@@ -216,6 +241,7 @@ func mergeGeometry(route Route) string {
 		for _, seg := range m.OutcomingPath.Geometry {
 			matches := linestringRe.FindStringSubmatch(seg.Selection)
 			if len(matches) < 2 {
+				log.Printf("skipping segment: geometry regex did not match: %q", seg.Selection)
 				continue
 			}
 			coords := strings.Split(matches[1], ",")

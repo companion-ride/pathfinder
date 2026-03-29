@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -21,7 +22,8 @@ type Cache struct {
 func New(addr string) *Cache {
 	return &Cache{
 		client: redis.NewClient(&redis.Options{
-			Addr: addr,
+			Addr:     addr,
+			Password: os.Getenv("REDIS_PASSWORD"),
 		}),
 	}
 }
@@ -61,6 +63,7 @@ func (c *Cache) AddClosestPoint(ctx context.Context, routeID string, data any) e
 	key := closestKey(routeID)
 	pipe := c.client.Pipeline()
 	pipe.RPush(ctx, key, b)
+	pipe.LTrim(ctx, key, -100, -1)
 	pipe.Expire(ctx, key, defaultTTL)
 	_, err = pipe.Exec(ctx)
 	return err
@@ -88,6 +91,7 @@ func (c *Cache) AddWalk(ctx context.Context, routeID string, data any) error {
 	key := walkKey(routeID)
 	pipe := c.client.Pipeline()
 	pipe.RPush(ctx, key, b)
+	pipe.LTrim(ctx, key, -100, -1)
 	pipe.Expire(ctx, key, defaultTTL)
 	_, err = pipe.Exec(ctx)
 	return err
