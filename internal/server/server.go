@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -29,22 +29,25 @@ func NewServer() (*http.Server, int) {
 	if err != nil || port == 0 {
 		port = 8080
 		if os.Getenv("PORT") != "" {
-			log.Printf("WARNING: invalid PORT %q, defaulting to %d", os.Getenv("PORT"), port)
+			slog.Warn("invalid PORT, using default", "port_value", os.Getenv("PORT"), "port", port)
 		}
 	}
 	// Validate critical environment variables
 	jwtSecret := os.Getenv("JWT_SECRET_KEY")
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET_KEY environment variable is required")
+		slog.Error("missing required environment variable", "variable", "JWT_SECRET_KEY")
+		os.Exit(1)
 	}
 	for _, key := range []string{"DB_HOST", "DB_PORT", "DB_DATABASE", "DB_USERNAME"} {
 		if os.Getenv(key) == "" {
-			log.Fatalf("%s environment variable is required", key)
+			slog.Error("missing required environment variable", "variable", key)
+			os.Exit(1)
 		}
 	}
 	apiKey := os.Getenv("DOUBLE_GIS_API_KEY")
 	if apiKey == "" {
-		log.Fatal("DOUBLE_GIS_API_KEY environment variable is required")
+		slog.Error("missing required environment variable", "variable", "DOUBLE_GIS_API_KEY")
+		os.Exit(1)
 	}
 
 	redisAddr := os.Getenv("REDIS_ADDR")

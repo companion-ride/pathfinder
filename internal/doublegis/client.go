@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"regexp"
@@ -195,7 +195,7 @@ func extractSegments(route Route) ([]RouteSegment, string) {
 		for _, seg := range m.OutcomingPath.Geometry {
 			matches := linestringRe.FindStringSubmatch(seg.Selection)
 			if len(matches) < 2 {
-				log.Printf("skipping segment: geometry regex did not match: %q", seg.Selection)
+				slog.Warn("skipping segment: geometry regex did not match", "selection", seg.Selection)
 				continue
 			}
 
@@ -241,7 +241,7 @@ func mergeGeometry(route Route) string {
 		for _, seg := range m.OutcomingPath.Geometry {
 			matches := linestringRe.FindStringSubmatch(seg.Selection)
 			if len(matches) < 2 {
-				log.Printf("skipping segment: geometry regex did not match: %q", seg.Selection)
+				slog.Warn("skipping segment: geometry regex did not match", "selection", seg.Selection)
 				continue
 			}
 			coords := strings.Split(matches[1], ",")

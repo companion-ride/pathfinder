@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
@@ -71,7 +71,8 @@ func New() Service {
 		connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", username, password, host, port, database, schema)
 		db, err := sql.Open("pgx", connStr)
 		if err != nil {
-			log.Fatal(err)
+			slog.Error("failed to open database connection", "error", err)
+			os.Exit(1)
 		}
 		db.SetMaxOpenConns(25)
 		db.SetMaxIdleConns(5)
@@ -136,7 +137,7 @@ func (s *service) Health() map[string]string {
 // If the connection is successfully closed, it returns nil.
 // If an error occurs while closing the connection, it returns the error.
 func (s *service) Close() error {
-	log.Printf("Disconnected from database: %s", database)
+	slog.Info("disconnected from database", "database", database)
 	return s.db.Close()
 }
 

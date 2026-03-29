@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -141,11 +141,16 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 		Maneuvers:     maneuversJSON,
 	}
 
-	log.Printf("SaveRoute input: wkt=%q startLon=%v startLat=%v endLon=%v endLat=%v maneuversLen=%d",
-		mergedWKT, meta.StartLon, meta.StartLat, meta.EndLon, meta.EndLat, len(meta.Maneuvers))
+	slog.Info("saving route",
+		"wkt", mergedWKT,
+		"start_lon", meta.StartLon,
+		"start_lat", meta.StartLat,
+		"end_lon", meta.EndLon,
+		"end_lat", meta.EndLat,
+		"maneuvers_len", len(meta.Maneuvers))
 	routeID, err := s.db.SaveRoute(c.Request.Context(), mergedWKT, meta)
 	if err != nil {
-		log.Printf("SaveRoute error: %v", err)
+		slog.Error("save route failed", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save route"})
 		return
 	}
@@ -154,7 +159,7 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 	for _, rs := range routeSegments {
 		coords, err := geo.ParseWKTLinestring(rs.WKT)
 		if err != nil {
-			log.Printf("skipping segment with unparseable geometry: %v", err)
+			slog.Warn("skipping segment with unparseable geometry", "error", err)
 			continue
 		}
 		segments = append(segments, geo.Segment{
@@ -176,10 +181,10 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 
 	// Best-effort cache — don't fail the request if Redis is down
 	if err := s.cache.SetRoute(c.Request.Context(), routeID, resp); err != nil {
-		log.Printf("cache SetRoute error (non-fatal): %v", err)
+		slog.Warn("cache SetRoute failed", "error", err)
 	}
 	if err := s.cache.SetRawResponse(c.Request.Context(), routeID, rawJSON); err != nil {
-		log.Printf("cache SetRawResponse error (non-fatal): %v", err)
+		slog.Warn("cache SetRawResponse failed", "error", err)
 	}
 
 	c.JSON(http.StatusCreated, resp)
@@ -235,7 +240,7 @@ func (s *Server) FindClosestPointHandler(c *gin.Context) {
 	}
 
 	if err := s.cache.AddClosestPoint(c.Request.Context(), routeID, resp); err != nil {
-		log.Printf("cache AddClosestPoint error (non-fatal): %v", err)
+		slog.Warn("cache AddClosestPoint failed", "error", err)
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -310,7 +315,7 @@ func (s *Server) WalkToClosestHandler(c *gin.Context) {
 	}
 
 	if err := s.cache.AddWalk(c.Request.Context(), routeID, resp); err != nil {
-		log.Printf("cache AddWalk error (non-fatal): %v", err)
+		slog.Warn("cache AddWalk failed", "error", err)
 	}
 
 	c.JSON(http.StatusOK, resp)

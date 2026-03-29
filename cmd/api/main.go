@@ -13,7 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -42,18 +42,18 @@ func registerWithGateway(port int) {
 	})
 	req, err := http.NewRequest(http.MethodPost, gatewayURL+"/internal/register", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("could not create gateway register request: %v", err)
+		slog.Error("could not create gateway register request", "error", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+secret)
 	resp, err := gatewayClient.Do(req)
 	if err != nil {
-		log.Printf("could not register with api-gateway: %v", err)
+		slog.Error("could not register with api-gateway", "error", err)
 		return
 	}
 	resp.Body.Close()
-	log.Printf("registered with api-gateway as %s", _serviceName)
+	slog.Info("registered with api-gateway", "service", _serviceName)
 }
 
 func deregisterFromGateway() {
@@ -64,17 +64,17 @@ func deregisterFromGateway() {
 	}
 	req, err := http.NewRequest(http.MethodDelete, gatewayURL+"/internal/deregister?name="+_serviceName, nil)
 	if err != nil {
-		log.Printf("could not create gateway deregister request: %v", err)
+		slog.Error("could not create gateway deregister request", "error", err)
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+secret)
 	resp, err := gatewayClient.Do(req)
 	if err != nil {
-		log.Printf("could not deregister from api-gateway: %v", err)
+		slog.Error("could not deregister from api-gateway", "error", err)
 		return
 	}
 	resp.Body.Close()
-	log.Printf("deregistered from api-gateway: %s", _serviceName)
+	slog.Info("deregistered from api-gateway", "service", _serviceName)
 }
 
 func gracefulShutdown(apiServer *http.Server, done chan bool) {
@@ -83,7 +83,7 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 
 	<-ctx.Done()
 
-	log.Println("shutting down gracefully, press Ctrl+C again to force")
+	slog.Info("shutting down gracefully, press Ctrl+C again to force")
 	stop()
 
 	deregisterFromGateway()
@@ -91,16 +91,21 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := apiServer.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown with error: %v", err)
+		slog.Error("server forced to shutdown", "error", err)
 	}
 
-	log.Println("Server exiting")
+	slog.Info("server exiting")
 	done <- true
 }
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	if err := database.RunMigrations("migrations"); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	srv, port := server.NewServer()
@@ -117,5 +122,5 @@ func main() {
 
 	// Wait for the graceful shutdown to complete
 	<-done
-	log.Println("Graceful shutdown complete.")
+	slog.Info("graceful shutdown complete")
 }
