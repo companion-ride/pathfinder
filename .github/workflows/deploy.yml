@@ -28,6 +28,8 @@ jobs:
           SERVICE_HOST: ${{ secrets.SERVICE_HOST }}
           SWAGGER_HOST: ${{ secrets.SWAGGER_HOST }}
           SWAGGER_BASE_PATH: ${{ secrets.SWAGGER_BASE_PATH }}
+          CONFIG_SERVICE_URL: ${{ secrets.CONFIG_SERVICE_URL }}
+          CONFIG_SERVICE_API_KEY: ${{ secrets.CONFIG_SERVICE_API_KEY }}
         run: |
           docker network create blueprint 2>/dev/null || true
           docker compose -f docker-compose.prod.yml build

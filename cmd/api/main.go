@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"pathfinder/internal/configclient"
 	"pathfinder/internal/database"
 	"pathfinder/internal/server"
 )
@@ -77,27 +78,6 @@ func deregisterFromGateway() {
 	slog.Info("deregistered from api-gateway", "service", _serviceName)
 }
 
-func gracefulShutdown(apiServer *http.Server, done chan bool) {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	<-ctx.Done()
-
-	slog.Info("shutting down gracefully, press Ctrl+C again to force")
-	stop()
-
-	deregisterFromGateway()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := apiServer.Shutdown(ctx); err != nil {
-		slog.Error("server forced to shutdown", "error", err)
-	}
-
-	slog.Info("server exiting")
-	done <- true
-}
-
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -108,19 +88,63 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, port := server.NewServer()
+	// Initialize pathfinder config with defaults
+	pfConfig := server.NewPathfinderConfigLoader(server.DefaultPathfinderConfig())
+
+	configURL := os.Getenv("CONFIG_SERVICE_URL")
+	configKey := os.Getenv("CONFIG_SERVICE_API_KEY")
+	ctx, cancel := context.WithCancel(context.Background())
+
+	if configURL != "" && configKey != "" {
+		cc := configclient.New(configURL, configKey, "pathfinder")
+		raw, changed, err := cc.Fetch(context.Background())
+		if err != nil {
+			slog.Warn("config-service unavailable at startup, using defaults", "error", err)
+		} else if changed {
+			var cfg server.PathfinderConfig
+			if err := json.Unmarshal(raw, &cfg); err == nil {
+				pfConfig.Store(&cfg)
+				slog.Info("loaded pathfinder config from config-service")
+			}
+		}
+
+		cc.StartPolling(ctx, 30*time.Second, func(raw json.RawMessage) {
+			var cfg server.PathfinderConfig
+			if err := json.Unmarshal(raw, &cfg); err != nil {
+				slog.Error("failed to unmarshal pathfinder config", "error", err)
+				return
+			}
+			pfConfig.Store(&cfg)
+		})
+	}
+
+	srv, port := server.NewServer(pfConfig)
 
 	registerWithGateway(port)
 
 	done := make(chan bool, 1)
-	go gracefulShutdown(srv, done)
+	go func() {
+		sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		<-sigCtx.Done()
+		slog.Info("shutting down gracefully, press Ctrl+C again to force")
+		stop()
+		cancel() // stop config polling
+		deregisterFromGateway()
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		if err := srv.Shutdown(shutCtx); err != nil {
+			slog.Error("server forced to shutdown", "error", err)
+		}
+		slog.Info("server exiting")
+		done <- true
+	}()
 
 	err := srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		panic(fmt.Sprintf("http server error: %s", err))
 	}
 
-	// Wait for the graceful shutdown to complete
 	<-done
 	slog.Info("graceful shutdown complete")
 }

@@ -35,26 +35,29 @@ type RouteInfo struct {
 	Waypoints       []Waypoint
 }
 
+type RouteParams struct {
+	RouteMode   string
+	TrafficMode string
+	Locale      string
+	Timeout     time.Duration
+}
+
 type Client struct {
 	apiKey     string
 	baseURL    string
-	locale     string
+	getParams  func() RouteParams
 	httpClient *http.Client
 }
 
-func NewClient(apiKey string) *Client {
+func NewClient(apiKey string, getParams func() RouteParams) *Client {
 	base := os.Getenv("DOUBLEGIS_BASE_URL")
 	if base == "" {
 		base = defaultBaseURL
 	}
-	locale := os.Getenv("DOUBLEGIS_LOCALE")
-	if locale == "" {
-		locale = "kk"
-	}
 	return &Client{
-		apiKey:  apiKey,
-		baseURL: base,
-		locale:  locale,
+		apiKey:    apiKey,
+		baseURL:   base,
+		getParams: getParams,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -62,16 +65,20 @@ func NewClient(apiKey string) *Client {
 }
 
 func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLon float64) ([]RouteSegment, string, *RouteInfo, []byte, error) {
+	p := c.getParams()
+	ctx, cancel := context.WithTimeout(ctx, p.Timeout)
+	defer cancel()
+
 	reqBody := RoutingRequest{
 		Points: []Point{
 			{Type: "stop", Lat: startLat, Lon: startLon},
 			{Type: "stop", Lat: endLat, Lon: endLon},
 		},
 		Transport:   "driving",
-		RouteMode:   "fastest",
-		TrafficMode: "jam",
+		RouteMode:   p.RouteMode,
+		TrafficMode: p.TrafficMode,
 		Output:      "detailed",
-		Locale:      c.locale,
+		Locale:      p.Locale,
 	}
 
 	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)
@@ -106,6 +113,10 @@ func (c *Client) GetRoute(ctx context.Context, startLat, startLon, endLat, endLo
 }
 
 func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, toLon float64) (string, *RouteInfo, []byte, error) {
+	p := c.getParams()
+	ctx, cancel := context.WithTimeout(ctx, p.Timeout)
+	defer cancel()
+
 	reqBody := RoutingRequest{
 		Points: []Point{
 			{Type: "stop", Lat: fromLat, Lon: fromLon},
@@ -114,7 +125,7 @@ func (c *Client) GetWalkingRoute(ctx context.Context, fromLat, fromLon, toLat, t
 		Transport: "pedestrian",
 		RouteMode: "fastest",
 		Output:    "detailed",
-		Locale:    c.locale,
+		Locale:    p.Locale,
 	}
 
 	routingResp, rawJSON, err := c.doRoutingRequest(ctx, reqBody)

@@ -16,15 +16,16 @@ import (
 )
 
 type Server struct {
-	port      int
-	db        database.Service
-	doublegis *doublegis.Client
+	port         int
+	db           database.Service
+	doublegis    *doublegis.Client
 	cache        *cache.Cache
 	mapAPIKey    string
 	jwtSecretKey string
+	pfConfig     *PathfinderConfigLoader
 }
 
-func NewServer() (*http.Server, int) {
+func NewServer(pfConfig *PathfinderConfigLoader) (*http.Server, int) {
 	port, err := strconv.Atoi(os.Getenv("PORT"))
 	if err != nil || port == 0 {
 		port = 8080
@@ -52,12 +53,21 @@ func NewServer() (*http.Server, int) {
 
 	redisAddr := os.Getenv("REDIS_ADDR")
 	s := &Server{
-		port:      port,
-		db:        database.New(),
-		doublegis: doublegis.NewClient(apiKey),
-		cache:     cache.New(redisAddr),
+		port: port,
+		db:   database.New(),
+		doublegis: doublegis.NewClient(apiKey, func() doublegis.RouteParams {
+			cfg := pfConfig.Get()
+			return doublegis.RouteParams{
+				RouteMode:   cfg.RouteMode,
+				TrafficMode: cfg.TrafficMode,
+				Locale:      cfg.Locale,
+				Timeout:     time.Duration(cfg.RequestTimeoutSeconds) * time.Second,
+			}
+		}),
+		cache:        cache.New(redisAddr),
 		mapAPIKey:    apiKey,
 		jwtSecretKey: jwtSecret,
+		pfConfig:     pfConfig,
 	}
 
 	server := &http.Server{

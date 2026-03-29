@@ -37,6 +37,8 @@ services:
       SERVICE_HOST: ${SERVICE_HOST}
       SWAGGER_HOST: ${SWAGGER_HOST}
       SWAGGER_BASE_PATH: ${SWAGGER_BASE_PATH}
+      CONFIG_SERVICE_URL: ${CONFIG_SERVICE_URL}
+      CONFIG_SERVICE_API_KEY: ${CONFIG_SERVICE_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
