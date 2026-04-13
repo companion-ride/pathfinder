@@ -179,7 +179,12 @@ func (c *Client) doRoutingRequest(ctx context.Context, reqBody RoutingRequest) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("2gis api returned status %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(resp.Body)
+		slog.Error("2GIS API error",
+			"status", resp.StatusCode,
+			"body", string(errBody),
+		)
+		return nil, nil, fmt.Errorf("2gis api returned status %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	body, err := io.ReadAll(resp.Body)
