@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const defaultBaseURL = "http://routing.api.2gis.com/routing/7.0.0/global"
+const defaultBaseURL = "https://routing.api.2gis.com/routing/7.0.0/global"
 
 var linestringRe = regexp.MustCompile(`LINESTRING\s*\(([^)]+)\)`)
 
