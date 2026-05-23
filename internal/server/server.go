@@ -45,17 +45,18 @@ func NewServer(pfConfig *PathfinderConfigLoader) (*http.Server, int) {
 			os.Exit(1)
 		}
 	}
-	apiKey := os.Getenv("DOUBLE_GIS_API_KEY")
-	if apiKey == "" {
-		slog.Error("missing required environment variable", "variable", "DOUBLE_GIS_API_KEY")
+	apiKeys, err := parseAPIKeys()
+	if err != nil {
+		slog.Error("missing required environment variable", "variable", "DOUBLE_GIS_API_KEYS", "error", err)
 		os.Exit(1)
 	}
+	slog.Info("loaded 2gis api keys", "count", len(apiKeys))
 
 	redisAddr := os.Getenv("REDIS_ADDR")
 	s := &Server{
 		port: port,
 		db:   database.New(),
-		doublegis: doublegis.NewClient([]string{apiKey}, func() doublegis.RouteParams {
+		doublegis: doublegis.NewClient(apiKeys, func() doublegis.RouteParams {
 			cfg := pfConfig.Get()
 			return doublegis.RouteParams{
 				RouteMode:   cfg.RouteMode,
@@ -65,7 +66,7 @@ func NewServer(pfConfig *PathfinderConfigLoader) (*http.Server, int) {
 			}
 		}),
 		cache:        cache.New(redisAddr),
-		mapAPIKey:    apiKey,
+		mapAPIKey:    apiKeys[0],
 		jwtSecretKey: jwtSecret,
 		pfConfig:     pfConfig,
 	}
