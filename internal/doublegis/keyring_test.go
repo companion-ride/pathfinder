@@ -1,6 +1,7 @@
 package doublegis
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -113,4 +114,26 @@ func TestKeyring_MarkRateLimitedIsIdempotent(t *testing.T) {
 	if key != "b" {
 		t.Fatalf("acquire = %q, want \"b\" (double-mark must not advance past next healthy key)", key)
 	}
+}
+
+func TestKeyring_ConcurrentAcquireAndMark(t *testing.T) {
+	k := newKeyring([]string{"a", "b", "c", "d"})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				k.acquire()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				k.markRateLimited(j%4, time.Millisecond)
+			}
+		}()
+	}
+	wg.Wait()
 }
