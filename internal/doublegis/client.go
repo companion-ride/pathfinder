@@ -43,19 +43,19 @@ type RouteParams struct {
 }
 
 type Client struct {
-	apiKey     string
+	keys       *keyring
 	baseURL    string
 	getParams  func() RouteParams
 	httpClient *http.Client
 }
 
-func NewClient(apiKey string, getParams func() RouteParams) *Client {
+func NewClient(apiKeys []string, getParams func() RouteParams) *Client {
 	base := os.Getenv("DOUBLEGIS_BASE_URL")
 	if base == "" {
 		base = defaultBaseURL
 	}
 	return &Client{
-		apiKey:    apiKey,
+		keys:      newKeyring(apiKeys),
 		baseURL:   base,
 		getParams: getParams,
 		httpClient: &http.Client{
@@ -165,39 +165,74 @@ func (c *Client) doRoutingRequest(ctx context.Context, reqBody RoutingRequest) (
 		return nil, nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s?key=%s", c.baseURL, c.apiKey)
+	for attempt := 0; attempt < c.keys.size(); attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
+
+		key, keyIdx, ok := c.keys.acquire()
+		if !ok {
+			return nil, nil, fmt.Errorf("all 2gis api keys are rate-limited")
+		}
+
+		routingResp, body, retry, err := c.sendOnce(ctx, key, keyIdx, jsonBody)
+		if retry {
+			continue
+		}
+		return routingResp, body, err
+	}
+
+	slog.Error("all 2gis api keys exhausted")
+	return nil, nil, fmt.Errorf("all 2gis api keys are rate-limited")
+}
+
+// sendOnce performs a single HTTP request with the given key.
+// retry=true means the caller should rotate and try again (current key was 429'd).
+func (c *Client) sendOnce(ctx context.Context, key string, keyIdx int, jsonBody []byte) (*RoutingResponse, []byte, bool, error) {
+	url := fmt.Sprintf("%s?key=%s", c.baseURL, key)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonBody))
 	if err != nil {
-		return nil, nil, fmt.Errorf("creating request: %w", err)
+		return nil, nil, false, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("calling 2gis api: %w", err)
+		return nil, nil, false, fmt.Errorf("calling 2gis api: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		c.keys.markRateLimited(keyIdx, retryAfter)
+		slog.Warn("2gis api key rate-limited, rotating",
+			"key_index", keyIdx,
+			"retry_after", retryAfter,
+		)
+		return nil, nil, true, nil
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		errBody, _ := io.ReadAll(resp.Body)
 		slog.Error("2GIS API error",
 			"status", resp.StatusCode,
+			"key_index", keyIdx,
 			"body", string(errBody),
 		)
-		return nil, nil, fmt.Errorf("2gis api returned status %d: %s", resp.StatusCode, string(errBody))
+		return nil, nil, false, fmt.Errorf("2gis api returned status %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading response body: %w", err)
+		return nil, nil, false, fmt.Errorf("reading response body: %w", err)
 	}
 
 	var routingResp RoutingResponse
 	if err := json.Unmarshal(body, &routingResp); err != nil {
-		return nil, nil, fmt.Errorf("decoding response: %w", err)
+		return nil, nil, false, fmt.Errorf("decoding response: %w", err)
 	}
 
-	return &routingResp, body, nil
+	return &routingResp, body, false, nil
 }
 
 func extractSegments(route Route) ([]RouteSegment, string) {
