@@ -55,7 +55,7 @@ func NewServer(pfConfig *PathfinderConfigLoader) (*http.Server, int) {
 	s := &Server{
 		port: port,
 		db:   database.New(),
-		doublegis: doublegis.NewClient(apiKey, func() doublegis.RouteParams {
+		doublegis: doublegis.NewClient([]string{apiKey}, func() doublegis.RouteParams {
 			cfg := pfConfig.Get()
 			return doublegis.RouteParams{
 				RouteMode:   cfg.RouteMode,
