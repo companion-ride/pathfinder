@@ -5,7 +5,17 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Install swag CLI so the swagger spec is regenerated from current code on every build.
+# Pinned; bump when upgrading.
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
+
 COPY . .
+
+# Regenerate docs/swagger.json from current handler annotations.
+RUN /go/bin/swag init \
+    --dir cmd/api,internal/server,internal/geo \
+    --output docs \
+    --outputTypes json
 
 RUN go build -o main cmd/api/main.go
 
