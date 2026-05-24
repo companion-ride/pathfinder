@@ -34,6 +34,19 @@ type CreateRouteResponse struct {
 	TotalDuration string        `json:"total_duration"`
 }
 
+type CustomRouteCoord struct {
+	Lat float64 `json:"lat" binding:"min=-90,max=90"`
+	Lon float64 `json:"lon" binding:"min=-180,max=180"`
+}
+
+type CustomRouteSegment struct {
+	Coords []CustomRouteCoord `json:"coords" binding:"required,min=2,dive"`
+}
+
+type CreateCustomRouteRequest struct {
+	Segments []CustomRouteSegment `json:"segments" binding:"required,min=1,dive"`
+}
+
 type FindClosestPointRequest struct {
 	Lat float64 `json:"lat" binding:"required,min=-90,max=90"`
 	Lon float64 `json:"lon" binding:"required,min=-180,max=180"`
