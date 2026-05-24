@@ -258,11 +258,10 @@ func (s *Server) CreateCustomRouteHandler(c *gin.Context) {
 		})
 		totalDistanceM += distM
 		totalDurationS += durS
-	}
-
-	if totalDistanceM > 200_000 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "route exceeds 200 km limit"})
-		return
+		if totalDistanceM > 200_000 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "route exceeds 200 km limit"})
+			return
+		}
 	}
 
 	// Build merged WKT, deduping a coord bitwise-identical to the previous one
@@ -289,7 +288,7 @@ func (s *Server) CreateCustomRouteHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "polyline collapses to a single point"})
 		return
 	}
-	mergedWKT := "LINESTRING(" + strings.Join(points, ",") + ")"
+	mergedWKT := "LINESTRING(" + strings.Join(points, ", ") + ")"
 
 	meta := database.RouteMetadata{
 		TotalDistance: totalDistanceM,

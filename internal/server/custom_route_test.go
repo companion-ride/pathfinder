@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -176,5 +177,14 @@ func TestCustomRoute_AvgSpeedZeroFallsBack(t *testing.T) {
 	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
 	if resp.Segments[0].Duration < 95 || resp.Segments[0].Duration > 105 {
 		t.Errorf("duration with fallback = %d, want ~100", resp.Segments[0].Duration)
+	}
+}
+
+func TestCustomRoute_DBError(t *testing.T) {
+	db := &fakeDB{saveErr: errors.New("connection reset")}
+	body := `{"segments":[{"coords":[{"lat":51.10,"lon":71.40},{"lat":51.11,"lon":71.40}]}]}`
+	rr := doCustomRoute(t, newTestServer(db, 11.11), body)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d, want 500; body=%s", rr.Code, rr.Body.String())
 	}
 }
