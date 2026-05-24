@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -32,6 +34,19 @@ type CreateRouteResponse struct {
 	Segments      []geo.Segment `json:"segments"`
 	TotalDistance  string        `json:"total_distance"`
 	TotalDuration string        `json:"total_duration"`
+}
+
+type CustomRouteCoord struct {
+	Lat float64 `json:"lat" binding:"min=-90,max=90"`
+	Lon float64 `json:"lon" binding:"min=-180,max=180"`
+}
+
+type CustomRouteSegment struct {
+	Coords []CustomRouteCoord `json:"coords" binding:"required,min=2,dive"`
+}
+
+type CreateCustomRouteRequest struct {
+	Segments []CustomRouteSegment `json:"segments" binding:"required,min=1,dive"`
 }
 
 type FindClosestPointRequest struct {
@@ -187,6 +202,126 @@ func (s *Server) CreateRouteHandler(c *gin.Context) {
 		slog.Warn("cache SetRawResponse failed", "error", err)
 	}
 
+	c.JSON(http.StatusCreated, resp)
+}
+
+// CreateCustomRouteHandler godoc
+//
+//	@Summary		Create a custom (driver-drawn) route
+//	@Description	Stores a caller-supplied polyline as a route, computing distance via haversine and duration from a configured average speed. No 2GIS call.
+//	@Tags			routes
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		CreateCustomRouteRequest	true	"Segments of coordinates"
+//	@Success		201		{object}	CreateRouteResponse
+//	@Failure		400		{object}	map[string]string
+//	@Failure		500		{object}	map[string]string
+//	@Router			/routes/custom [post]
+func (s *Server) CreateCustomRouteHandler(c *gin.Context) {
+	var req CreateCustomRouteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	total := 0
+	for _, seg := range req.Segments {
+		total += len(seg.Coords)
+	}
+	if total > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "too many coordinates (max 500)"})
+		return
+	}
+
+	avgSpeed := s.pfConfig.Get().CustomRouteAvgSpeedMPS
+	if avgSpeed <= 0 {
+		avgSpeed = defaultCustomRouteAvgSpeedMPS
+	}
+
+	segments := make([]geo.Segment, 0, len(req.Segments))
+	totalDistanceM := 0
+	totalDurationS := 0
+	for _, seg := range req.Segments {
+		coords := make([]geo.Coord, len(seg.Coords))
+		for i, cc := range seg.Coords {
+			coords[i] = geo.Coord{Lat: cc.Lat, Lon: cc.Lon}
+		}
+		distM := geo.HaversineSum(coords)
+		durS := int(math.Round(float64(distM) / avgSpeed))
+		segments = append(segments, geo.Segment{
+			Coords:      coords,
+			Color:       "",
+			Comment:     "",
+			StreetNames: nil,
+			Distance:    distM,
+			Duration:    durS,
+		})
+		totalDistanceM += distM
+		totalDurationS += durS
+		if totalDistanceM > 200_000 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "route exceeds 200 km limit"})
+			return
+		}
+	}
+
+	// Build merged WKT, deduping a coord bitwise-identical to the previous one
+	// (segment-boundary endpoints) so PostGIS sees no zero-length sub-segments.
+	var points []string
+	var prevLon, prevLat float64
+	have := false
+	var firstLon, firstLat, lastLon, lastLat float64
+	for _, seg := range segments {
+		for _, co := range seg.Coords {
+			if have && co.Lon == prevLon && co.Lat == prevLat {
+				continue
+			}
+			points = append(points, fmt.Sprintf("%f %f", co.Lon, co.Lat))
+			if !have {
+				firstLon, firstLat = co.Lon, co.Lat
+			}
+			lastLon, lastLat = co.Lon, co.Lat
+			prevLon, prevLat = co.Lon, co.Lat
+			have = true
+		}
+	}
+	if len(points) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "polyline collapses to a single point"})
+		return
+	}
+	mergedWKT := "LINESTRING(" + strings.Join(points, ", ") + ")"
+
+	meta := database.RouteMetadata{
+		TotalDistance: totalDistanceM,
+		TotalDuration: totalDurationS,
+		StartLon:      firstLon,
+		StartLat:      firstLat,
+		EndLon:        lastLon,
+		EndLat:        lastLat,
+		Maneuvers:     json.RawMessage("[]"),
+	}
+
+	routeID, err := s.db.SaveRoute(c.Request.Context(), mergedWKT, meta)
+	if err != nil {
+		slog.Error("save custom route failed", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save route"})
+		return
+	}
+
+	resp := CreateRouteResponse{
+		RouteID:       routeID,
+		Segments:      segments,
+		TotalDistance: formatDistance(totalDistanceM),
+		TotalDuration: formatDuration(totalDurationS),
+	}
+
+	// Best-effort cache — no raw 2GIS payload to store.
+	if s.cache != nil {
+		if err := s.cache.SetRoute(c.Request.Context(), routeID, resp); err != nil {
+			slog.Warn("cache SetRoute failed", "error", err)
+		}
+	}
+
+	slog.Info("custom route created", "route_id", routeID, "segment_count", len(req.Segments), "total_distance_m", totalDistanceM)
 	c.JSON(http.StatusCreated, resp)
 }
 

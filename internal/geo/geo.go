@@ -2,6 +2,7 @@ package geo
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/golang/geo/s2"
@@ -75,4 +76,21 @@ func FindClosestPoint(wktLinestring string, target Coord) (Coord, error) {
 		Lat: closestLatLng.Lat.Degrees(),
 		Lon: closestLatLng.Lng.Degrees(),
 	}, nil
+}
+
+// HaversineSum returns the great-circle distance in meters along the polyline
+// formed by consecutive coords. Fewer than 2 coords yields 0.
+func HaversineSum(coords []Coord) int {
+	const earthRadiusM = 6371000.0
+	var total float64
+	for i := 1; i < len(coords); i++ {
+		lat1 := coords[i-1].Lat * math.Pi / 180
+		lat2 := coords[i].Lat * math.Pi / 180
+		dLat := (coords[i].Lat - coords[i-1].Lat) * math.Pi / 180
+		dLon := (coords[i].Lon - coords[i-1].Lon) * math.Pi / 180
+		a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+			math.Cos(lat1)*math.Cos(lat2)*math.Sin(dLon/2)*math.Sin(dLon/2)
+		total += earthRadiusM * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	}
+	return int(math.Round(total))
 }

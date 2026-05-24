@@ -23,6 +23,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	protected := r.Group("/")
 	protected.Use(auth.Middleware(s.jwtSecretKey))
 	protected.POST("/routes", s.CreateRouteHandler)
+	protected.POST("/routes/custom", s.CreateCustomRouteHandler)
 	protected.GET("/routes/:id", s.GetRouteHandler)
 	protected.GET("/routes/:id/raw", s.GetRawRouteHandler)
 	protected.POST("/routes/:id/closest-point", s.FindClosestPointHandler)
