@@ -2,10 +2,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +33,8 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       DOUBLE_GIS_API_KEYS: ${DOUBLE_GIS_API_KEYS}
       DOUBLE_GIS_API_KEY: ${DOUBLE_GIS_API_KEY}
-      REDIS_ADDR: ${REDIS_ADDR}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       GATEWAY_URL: ${GATEWAY_URL}
       GATEWAY_SECRET: ${GATEWAY_SECRET}
       SERVICE_HOST: ${SERVICE_HOST}

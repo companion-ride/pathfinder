@@ -23,7 +23,7 @@ jobs:
           JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
           DOUBLE_GIS_API_KEYS: ${{ secrets.DOUBLE_GIS_API_KEYS }}
           DOUBLE_GIS_API_KEY: ${{ secrets.DOUBLE_GIS_API_KEY }}
-          REDIS_ADDR: ${{ secrets.REDIS_ADDR }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
           GATEWAY_URL: ${{ secrets.GATEWAY_URL }}
           GATEWAY_SECRET: ${{ secrets.GATEWAY_SECRET }}
           SERVICE_HOST: ${{ secrets.SERVICE_HOST }}
