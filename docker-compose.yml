@@ -20,6 +20,7 @@ services:
       DOUBLE_GIS_API_KEYS: ${DOUBLE_GIS_API_KEYS}
       DOUBLE_GIS_API_KEY: ${DOUBLE_GIS_API_KEY}
       REDIS_ADDR: ${REDIS_ADDR}
+      ENABLE_DEBUG_PAGES: ${ENABLE_DEBUG_PAGES:-false}
     depends_on:
       psql_bp:
         condition: service_healthy

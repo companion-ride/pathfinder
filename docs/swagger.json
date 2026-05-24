@@ -31,15 +31,16 @@
                 }
             }
         },
-        "/api/config": {
+        "/config": {
             "get": {
+                "description": "Returns the 2GIS map API key used by the /app debug page. Registered only when ENABLE_DEBUG_PAGES=true.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "system"
                 ],
-                "summary": "Frontend configuration",
+                "summary": "Debug page configuration",
                 "responses": {
                     "200": {
                         "description": "OK",

@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/http"
+	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -14,10 +16,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Public routes
 	r.GET("/", s.HelloWorldHandler)
 	r.GET("/health", s.healthHandler)
-	r.StaticFile("/app", "./web/index.html")
 	r.StaticFile("/docs", "./web/swagger.html")
 	r.GET("/docs/swagger.json", s.SwaggerJSONHandler)
-	r.GET("/config", s.ConfigHandler)
+
+	// Debug page and the map key it reads; off unless explicitly enabled.
+	if enabled, _ := strconv.ParseBool(os.Getenv("ENABLE_DEBUG_PAGES")); enabled {
+		r.StaticFile("/app", "./web/index.html")
+		r.GET("/config", s.ConfigHandler)
+	}
 
 	// Protected routes
 	protected := r.Group("/")

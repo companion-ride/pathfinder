@@ -83,11 +83,12 @@ func parseRouteID(c *gin.Context) (string, bool) {
 
 // ConfigHandler godoc
 //
-//	@Summary	Frontend configuration
+//	@Summary	Debug page configuration
+//	@Description	Returns the 2GIS map API key used by the /app debug page. Registered only when ENABLE_DEBUG_PAGES=true.
 //	@Tags		system
 //	@Produce	json
 //	@Success	200	{object}	map[string]string
-//	@Router		/api/config [get]
+//	@Router		/config [get]
 func (s *Server) ConfigHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"map_api_key": s.mapAPIKey})
 }
